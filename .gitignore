@@ -1,0 +1,8 @@
+# Lambda binaries
+lambda/**/bootstrap
+
+# Local IDEs / Editor configurations
+.vscode/
+.idea/
+*.swp
+*.swo

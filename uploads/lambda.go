@@ -61,7 +61,7 @@ func applyRekognitionPolicy(ctx *pulumi.Context, roleName pulumi.StringInput) er
 	return nil
 }
 
-func applyS3ReadPolicy(ctx *pulumi.Context, name string, roleName pulumi.StringInput) error {
+func applyS3PermissionsPolicy(ctx *pulumi.Context, name string, roleName pulumi.StringInput) error {
 	_, err := iam.NewRolePolicy(ctx, name, &iam.RolePolicyArgs{
 		Role: roleName,
 		Policy: pulumi.String(`{
@@ -70,7 +70,9 @@ func applyS3ReadPolicy(ctx *pulumi.Context, name string, roleName pulumi.StringI
 				"Effect": "Allow",
 				"Action": [
 					"s3:GetObject",
-					"s3:GetObjectVersion"
+					"s3:GetObjectVersion",
+					"s3:DeleteObject",
+					"s3:DeleteObjectVersion"
 				],
 				"Resource": "arn:aws:s3:::uploads-bucket-*/*"
 			}]
@@ -99,7 +101,7 @@ func CreateOnCreateLambda(ctx *pulumi.Context, env string) (*lambda.Function, er
 		return nil, err
 	}
 
-	err = applyS3ReadPolicy(ctx, "lambdaS3ReadPolicy", lambdaRole.Name)
+	err = applyS3PermissionsPolicy(ctx, "lambdaS3PermissionsPolicy", lambdaRole.Name)
 	if err != nil {
 		return nil, err
 	}
