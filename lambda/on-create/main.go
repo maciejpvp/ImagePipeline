@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 
+	"lambda-on-create/internal/osstore"
 	"lambda-on-create/internal/recognition"
 	"lambda-on-create/internal/s3store"
 )
@@ -76,7 +77,44 @@ func (a *App) processRecord(ctx context.Context, record events.S3EventRecord) er
 	}
 	slog.Info("Image labels detected", "key", key, "labels", labels)
 
+	imgRecord := buildRecord(key, labels)
+	slog.Info("Image record", "record", imgRecord)
+
+	if err := osstore.IndexRecord(ctx, imgRecord); err != nil {
+		return fmt.Errorf("index record for %q: %w", key, err)
+	}
+	slog.Info("Image record indexed", "key", key)
+
 	return nil
+}
+
+func buildRecord(key string, labels []recognition.ContentLabel) osstore.Record {
+	seenCats := make(map[string]struct{})
+	seenParents := make(map[string]struct{})
+
+	var labelNames, categories, parents []string
+	for _, l := range labels {
+		labelNames = append(labelNames, l.Name)
+		for _, c := range l.Categories {
+			if _, ok := seenCats[c]; !ok {
+				seenCats[c] = struct{}{}
+				categories = append(categories, c)
+			}
+		}
+		for _, p := range l.Parents {
+			if _, ok := seenParents[p]; !ok {
+				seenParents[p] = struct{}{}
+				parents = append(parents, p)
+			}
+		}
+	}
+
+	return osstore.Record{
+		ImageKey:   key,
+		Labels:     labelNames,
+		Categories: categories,
+		Parents:    parents,
+	}
 }
 
 func main() {
@@ -92,6 +130,13 @@ func main() {
 
 	recognition.Init(cfg)
 	s3store.Init(cfg)
+
+	osEndpoint := os.Getenv("OPENSEARCH_ENDPOINT")
+	if osEndpoint == "" {
+		slog.Error("OPENSEARCH_ENDPOINT env var is not set")
+		os.Exit(1)
+	}
+	osstore.Init(osEndpoint)
 
 	app := &App{
 		moderationCfg: recognition.LoadModerationConfig(),

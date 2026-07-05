@@ -81,7 +81,7 @@ func applyS3PermissionsPolicy(ctx *pulumi.Context, name string, roleName pulumi.
 	return err
 }
 
-func CreateOnCreateLambda(ctx *pulumi.Context, env string) (*lambda.Function, error) {
+func CreateOnCreateLambda(ctx *pulumi.Context, env string, opensearchEndpoint pulumi.StringInput) (*lambda.Function, error) {
 	if err := build.BuildLambda(); err != nil {
 		return nil, err
 	}
@@ -117,7 +117,8 @@ func CreateOnCreateLambda(ctx *pulumi.Context, env string) (*lambda.Function, er
 		Timeout:    pulumi.Int(10),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
-				"env": pulumi.String(env),
+				"env":                  pulumi.String(env),
+				"OPENSEARCH_ENDPOINT": opensearchEndpoint,
 			},
 		},
 	})
