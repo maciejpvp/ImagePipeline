@@ -70,6 +70,12 @@ func (a *App) processRecord(ctx context.Context, record events.S3EventRecord) er
 	}
 	slog.Info("Image passed moderation check", "key", key)
 
+	labels, err := recognition.AnalyzeLabels(ctx, bucket, key, imageBytes, isNativeJPG)
+	if err != nil {
+		return fmt.Errorf("analyze labels for %q: %w", key, err)
+	}
+	slog.Info("Image labels detected", "key", key, "labels", labels)
+
 	return nil
 }
 

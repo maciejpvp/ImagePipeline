@@ -67,7 +67,15 @@ type Result struct {
 	Deletes []types.ModerationLabel
 }
 
-
+// ContentLabel is a single general-purpose image label returned by AnalyzeLabels.
+// It is intentionally decoupled from the SDK type so callers (and tests) do not
+// depend on the AWS package directly.
+type ContentLabel struct {
+	Name       string   `json:"name"`
+	Confidence float64  `json:"confidence"`
+	Parents    []string `json:"parents,omitempty"`
+	Categories []string `json:"categories,omitempty"`
+}
 
 // ---------------------------------------------------------------------------
 // Detect — public entry point
@@ -79,7 +87,7 @@ type Result struct {
 // If isNativeJPG is true the image is referenced directly via its S3
 // coordinates; otherwise imageBytes (a pre-converted JPEG) is sent inline.
 func Detect(ctx context.Context, cfg ModerationConfig, bucket, key string, imageBytes []byte, isNativeJPG bool) (Result, error) {
-	input := buildInput(bucket, key, imageBytes, isNativeJPG)
+	input := &rekognition.DetectModerationLabelsInput{Image: buildImage(bucket, key, imageBytes, isNativeJPG)}
 
 	output, err := client.DetectModerationLabels(ctx, input)
 	if err != nil {
@@ -88,6 +96,43 @@ func Detect(ctx context.Context, cfg ModerationConfig, bucket, key string, image
 
 	action, deletes := overallAction(cfg, output.ModerationLabels)
 	return Result{Action: action, Deletes: deletes}, nil
+}
+
+const (
+	detectLabelsMinConfidence float32 = 75.0
+	detectLabelsMaxLabels     int32   = 10
+)
+
+func AnalyzeLabels(ctx context.Context, bucket, key string, imageBytes []byte, isNativeJPG bool) ([]ContentLabel, error) {
+	minConf := detectLabelsMinConfidence
+	maxLabels := detectLabelsMaxLabels
+	input := &rekognition.DetectLabelsInput{
+		Image:         buildImage(bucket, key, imageBytes, isNativeJPG),
+		MinConfidence: &minConf,
+		MaxLabels:     &maxLabels,
+	}
+
+	output, err := client.DetectLabels(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("DetectLabels failed for %s/%s: %w", bucket, key, err)
+	}
+
+	labels := make([]ContentLabel, 0, len(output.Labels))
+	for _, l := range output.Labels {
+		if l.Name == nil {
+			continue
+		}
+		cl := ContentLabel{
+			Name:       *l.Name,
+			Parents:    extractParentNames(l.Parents),
+			Categories: extractCategoryNames(l.Categories),
+		}
+		if l.Confidence != nil {
+			cl.Confidence = float64(*l.Confidence)
+		}
+		labels = append(labels, cl)
+	}
+	return deduplicateLabels(labels), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -167,10 +212,56 @@ func overallAction(cfg ModerationConfig, labels []types.ModerationLabel) (string
 	return "allow", nil
 }
 
-func buildInput(bucket, key string, imageBytes []byte, isNativeJPG bool) *rekognition.DetectModerationLabelsInput {
+// buildImage constructs the Rekognition Image value used by both Detect and
+// AnalyzeLabels. When the source is a native JPEG it references the object
+// directly via S3 coordinates; otherwise it sends the pre-converted bytes inline.
+func buildImage(bucket, key string, imageBytes []byte, isNativeJPG bool) *types.Image {
 	if isNativeJPG {
-		s3Obj := &types.S3Object{Bucket: &bucket, Name: &key}
-		return &rekognition.DetectModerationLabelsInput{Image: &types.Image{S3Object: s3Obj}}
+		return &types.Image{S3Object: &types.S3Object{Bucket: &bucket, Name: &key}}
 	}
-	return &rekognition.DetectModerationLabelsInput{Image: &types.Image{Bytes: imageBytes}}
+	return &types.Image{Bytes: imageBytes}
+}
+
+func extractParentNames(parents []types.Parent) []string {
+	if len(parents) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(parents))
+	for _, p := range parents {
+		if p.Name != nil {
+			names = append(names, *p.Name)
+		}
+	}
+	return names
+}
+
+func extractCategoryNames(categories []types.LabelCategory) []string {
+	if len(categories) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(categories))
+	for _, c := range categories {
+		if c.Name != nil {
+			names = append(names, *c.Name)
+		}
+	}
+	return names
+}
+
+// deduplicateLabels removes any label whose name appears as a parent of another label in the same slice.
+func deduplicateLabels(labels []ContentLabel) []ContentLabel {
+	parentNames := make(map[string]struct{})
+	for _, l := range labels {
+		for _, p := range l.Parents {
+			parentNames[p] = struct{}{}
+		}
+	}
+
+	out := labels[:0] // reuse the backing array; safe because we only shrink
+	for _, l := range labels {
+		if _, isParent := parentNames[l.Name]; !isParent {
+			out = append(out, l)
+		}
+	}
+	return out
 }
