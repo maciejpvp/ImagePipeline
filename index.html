@@ -2,14 +2,14 @@
 <html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ImagePipeline · Visual Search</title>
-  <meta name="description" content="Fuzzy full-text image search powered by OpenSearch and AWS S3.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>ImagePipeline · Visual Search</title>
+   <meta name="description" content="Fuzzy full-text image search powered by OpenSearch and AWS S3.">
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-  <!--
+   <!--
     ╔══════════════════════════════════════════════════════════╗
     ║  AUTO-CONFIGURATION INJECTION                            ║
     ║  This block is rewritten by scripts/configure.sh after   ║
@@ -19,536 +19,629 @@
     ║  in-browser ⚙ Settings panel (stored in localStorage).  ║
     ╚══════════════════════════════════════════════════════════╝
   -->
-  <script id="pulumi-config">
-    window.__PULUMI_CONFIG__ = {
-      opensearchUrl: "http://3.120.37.203:9200/images/_search",
-      s3BucketUrl:   "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
-    };
-  </script>
+   <script id="pulumi-config">
+      window.__PULUMI_CONFIG__ = {
+         opensearchUrl: "http://3.120.37.203:9200/images/_search",
+         s3BucketUrl: "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
+      };
+   </script>
 
-  <style>
-    /* ── Reset & tokens ─────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+   <style>
+      /* ── Reset & tokens ─────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+         box-sizing: border-box;
+         margin: 0;
+         padding: 0;
+      }
 
-    :root {
-      --bg:        #0d0f14;
-      --surface:   #13161e;
-      --surface2:  #1b1f2b;
-      --border:    #252a38;
-      --accent:    #6366f1;
-      --accent2:   #818cf8;
-      --danger:    #f87171;
-      --success:   #34d399;
-      --text:      #e2e8f0;
-      --muted:     #64748b;
-      --radius:    14px;
-      --shadow:    0 8px 32px rgba(0,0,0,.45);
-    }
+      :root {
+         --bg: #0d0f14;
+         --surface: #13161e;
+         --surface2: #1b1f2b;
+         --border: #252a38;
+         --accent: #6366f1;
+         --accent2: #818cf8;
+         --danger: #f87171;
+         --success: #34d399;
+         --text: #e2e8f0;
+         --muted: #64748b;
+         --radius: 14px;
+         --shadow: 0 8px 32px rgba(0, 0, 0, .45);
+      }
 
-    html { scroll-behavior: smooth; }
+      html {
+         scroll-behavior: smooth;
+      }
 
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
+      body {
+         font-family: 'Inter', system-ui, sans-serif;
+         background: var(--bg);
+         color: var(--text);
+         min-height: 100vh;
+      }
 
-    /* ── Header ─────────────────────────────────────────────── */
-    header {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      padding: 1rem 2rem;
-      background: rgba(13,15,20,.82);
-      backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 1.5rem;
-    }
+      /* ── Header ─────────────────────────────────────────────── */
+      header {
+         position: sticky;
+         top: 0;
+         z-index: 100;
+         padding: 1rem 2rem;
+         background: rgba(13, 15, 20, .82);
+         backdrop-filter: blur(16px);
+         border-bottom: 1px solid var(--border);
+         display: flex;
+         align-items: center;
+         gap: 1.5rem;
+      }
 
-    .logo {
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: -.02em;
-      background: linear-gradient(135deg, var(--accent2), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      white-space: nowrap;
-    }
+      .logo {
+         font-size: 1.1rem;
+         font-weight: 700;
+         letter-spacing: -.02em;
+         background: linear-gradient(135deg, var(--accent2), var(--accent));
+         -webkit-background-clip: text;
+         -webkit-text-fill-color: transparent;
+         white-space: nowrap;
+      }
 
-    /* ── Search bar ─────────────────────────────────────────── */
-    .search-wrap {
-      flex: 1;
-      position: relative;
-    }
+      /* ── Search bar ─────────────────────────────────────────── */
+      .search-wrap {
+         flex: 1;
+         position: relative;
+      }
 
-    .search-icon {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--muted);
-      pointer-events: none;
-    }
+      .search-icon {
+         position: absolute;
+         left: 1rem;
+         top: 50%;
+         transform: translateY(-50%);
+         color: var(--muted);
+         pointer-events: none;
+      }
 
-    #searchBar {
-      width: 100%;
-      padding: .7rem 1rem .7rem 2.8rem;
-      font-family: inherit;
-      font-size: 1rem;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--text);
-      outline: none;
-      transition: border-color .2s, box-shadow .2s;
-    }
+      #searchBar {
+         width: 100%;
+         padding: .7rem 1rem .7rem 2.8rem;
+         font-family: inherit;
+         font-size: 1rem;
+         background: var(--surface2);
+         border: 1px solid var(--border);
+         border-radius: 10px;
+         color: var(--text);
+         outline: none;
+         transition: border-color .2s, box-shadow .2s;
+      }
 
-    #searchBar:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(99,102,241,.2);
-    }
+      #searchBar:focus {
+         border-color: var(--accent);
+         box-shadow: 0 0 0 3px rgba(99, 102, 241, .2);
+      }
 
-    #searchBar::placeholder { color: var(--muted); }
+      #searchBar::placeholder {
+         color: var(--muted);
+      }
 
-    /* ── Settings button ────────────────────────────────────── */
-    #settingsBtn {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      border-radius: 10px;
-      padding: .65rem .9rem;
-      cursor: pointer;
-      font-size: 1.1rem;
-      transition: color .2s, border-color .2s, background .2s;
-      line-height: 1;
-    }
-    #settingsBtn:hover { color: var(--text); border-color: var(--accent); background: var(--surface); }
+      /* ── Settings button ────────────────────────────────────── */
+      #settingsBtn {
+         background: var(--surface2);
+         border: 1px solid var(--border);
+         color: var(--muted);
+         border-radius: 10px;
+         padding: .65rem .9rem;
+         cursor: pointer;
+         font-size: 1.1rem;
+         transition: color .2s, border-color .2s, background .2s;
+         line-height: 1;
+      }
 
-    /* ── Status bar ─────────────────────────────────────────── */
-    #status {
-      text-align: center;
-      padding: 1.5rem 2rem .5rem;
-      font-size: .85rem;
-      color: var(--muted);
-      min-height: 3.5rem;
-    }
-    #status.error { color: var(--danger); }
+      #settingsBtn:hover {
+         color: var(--text);
+         border-color: var(--accent);
+         background: var(--surface);
+      }
 
-    /* ── Results grid ───────────────────────────────────────── */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1.5rem;
-      padding: .5rem 2rem 3rem;
-    }
+      /* ── Status bar ─────────────────────────────────────────── */
+      #status {
+         text-align: center;
+         padding: 1.5rem 2rem .5rem;
+         font-size: .85rem;
+         color: var(--muted);
+         min-height: 3.5rem;
+      }
 
-    /* ── Card ───────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      cursor: pointer;
-      transition: transform .22s ease, box-shadow .22s ease, border-color .22s;
-      animation: fadeUp .35s ease both;
-    }
+      #status.error {
+         color: var(--danger);
+      }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
+      /* ── Results grid ───────────────────────────────────────── */
+      .grid {
+         display: grid;
+         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+         gap: 1.5rem;
+         padding: .5rem 2rem 3rem;
+      }
 
-    .card:hover {
-      transform: translateY(-5px);
-      box-shadow: var(--shadow), 0 0 0 1px var(--accent);
-      border-color: var(--accent);
-    }
+      /* ── Card ───────────────────────────────────────────────── */
+      .card {
+         background: var(--surface);
+         border: 1px solid var(--border);
+         border-radius: var(--radius);
+         overflow: hidden;
+         cursor: pointer;
+         transition: transform .22s ease, box-shadow .22s ease, border-color .22s;
+         animation: fadeUp .35s ease both;
+      }
 
-    .card-img {
-      width: 100%;
-      height: 210px;
-      object-fit: cover;
-      background: var(--surface2);
-      display: block;
-    }
+      @keyframes fadeUp {
+         from {
+            opacity: 0;
+            transform: translateY(16px);
+         }
 
-    .card-body { padding: .9rem 1rem 1rem; }
+         to {
+            opacity: 1;
+            transform: translateY(0);
+         }
+      }
 
-    .card-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: .6rem;
-    }
+      .card:hover {
+         transform: translateY(-5px);
+         box-shadow: var(--shadow), 0 0 0 1px var(--accent);
+         border-color: var(--accent);
+      }
 
-    .card-id {
-      font-size: .75rem;
-      color: var(--muted);
-      font-family: 'SF Mono', 'Fira Code', monospace;
-    }
+      .card-img {
+         width: 100%;
+         height: 210px;
+         object-fit: cover;
+         background: var(--surface2);
+         display: block;
+      }
 
-    .score-badge {
-      font-size: .7rem;
-      font-weight: 600;
-      padding: .15rem .45rem;
-      border-radius: 5px;
-      background: rgba(99,102,241,.18);
-      color: var(--accent2);
-    }
+      .card-body {
+         padding: .9rem 1rem 1rem;
+      }
 
-    /* ── Tags ───────────────────────────────────────────────── */
-    .tag-group {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .35rem;
-    }
+      .card-meta {
+         display: flex;
+         align-items: center;
+         justify-content: space-between;
+         margin-bottom: .6rem;
+      }
 
-    .tag {
-      font-size: .72rem;
-      padding: .2rem .55rem;
-      border-radius: 5px;
-      background: var(--surface2);
-      color: var(--muted);
-      border: 1px solid transparent;
-      transition: background .15s;
-    }
+      .card-id {
+         font-size: .75rem;
+         color: var(--muted);
+         font-family: 'SF Mono', 'Fira Code', monospace;
+      }
 
-    .tag.match {
-      background: rgba(99,102,241,.2);
-      color: var(--accent2);
-      border-color: rgba(99,102,241,.4);
-      font-weight: 600;
-    }
+      .score-badge {
+         font-size: .7rem;
+         font-weight: 600;
+         padding: .15rem .45rem;
+         border-radius: 5px;
+         background: rgba(99, 102, 241, .18);
+         color: var(--accent2);
+      }
 
-    /* ── Settings modal ─────────────────────────────────────── */
-    #settingsOverlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.65);
-      backdrop-filter: blur(6px);
-      z-index: 200;
-      align-items: center;
-      justify-content: center;
-    }
-    #settingsOverlay.open { display: flex; }
+      /* ── Tags ───────────────────────────────────────────────── */
+      .tag-group {
+         display: flex;
+         flex-wrap: wrap;
+         gap: .35rem;
+      }
 
-    .settings-modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 2rem;
-      width: min(520px, 92vw);
-      box-shadow: var(--shadow);
-      animation: popIn .25s ease;
-    }
+      .tag {
+         font-size: .72rem;
+         padding: .2rem .55rem;
+         border-radius: 5px;
+         background: var(--surface2);
+         color: var(--muted);
+         border: 1px solid transparent;
+         transition: background .15s;
+      }
 
-    @keyframes popIn {
-      from { opacity: 0; transform: scale(.94); }
-      to   { opacity: 1; transform: scale(1); }
-    }
+      .tag.match {
+         background: rgba(99, 102, 241, .2);
+         color: var(--accent2);
+         border-color: rgba(99, 102, 241, .4);
+         font-weight: 600;
+      }
 
-    .settings-modal h2 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: .4rem;
-    }
+      /* ── Settings modal ─────────────────────────────────────── */
+      #settingsOverlay {
+         display: none;
+         position: fixed;
+         inset: 0;
+         background: rgba(0, 0, 0, .65);
+         backdrop-filter: blur(6px);
+         z-index: 200;
+         align-items: center;
+         justify-content: center;
+      }
 
-    .settings-modal p.hint {
-      font-size: .8rem;
-      color: var(--muted);
-      margin-bottom: 1.4rem;
-      line-height: 1.5;
-    }
+      #settingsOverlay.open {
+         display: flex;
+      }
 
-    .field { margin-bottom: 1.1rem; }
+      .settings-modal {
+         background: var(--surface);
+         border: 1px solid var(--border);
+         border-radius: var(--radius);
+         padding: 2rem;
+         width: min(520px, 92vw);
+         box-shadow: var(--shadow);
+         animation: popIn .25s ease;
+      }
 
-    .field label {
-      display: block;
-      font-size: .8rem;
-      font-weight: 500;
-      color: var(--muted);
-      margin-bottom: .4rem;
-    }
+      @keyframes popIn {
+         from {
+            opacity: 0;
+            transform: scale(.94);
+         }
 
-    .field input {
-      width: 100%;
-      padding: .65rem .9rem;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: .82rem;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      outline: none;
-      transition: border-color .2s;
-    }
-    .field input:focus { border-color: var(--accent); }
+         to {
+            opacity: 1;
+            transform: scale(1);
+         }
+      }
 
-    .settings-actions {
-      display: flex;
-      gap: .75rem;
-      justify-content: flex-end;
-      margin-top: 1.6rem;
-    }
+      .settings-modal h2 {
+         font-size: 1.1rem;
+         font-weight: 600;
+         margin-bottom: .4rem;
+      }
 
-    .btn {
-      padding: .6rem 1.2rem;
-      border-radius: 8px;
-      border: none;
-      font-family: inherit;
-      font-size: .85rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: opacity .15s, transform .1s;
-    }
-    .btn:hover { opacity: .88; }
-    .btn:active { transform: scale(.97); }
+      .settings-modal p.hint {
+         font-size: .8rem;
+         color: var(--muted);
+         margin-bottom: 1.4rem;
+         line-height: 1.5;
+      }
 
-    .btn-ghost {
-      background: var(--surface2);
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
+      .field {
+         margin-bottom: 1.1rem;
+      }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-    }
+      .field label {
+         display: block;
+         font-size: .8rem;
+         font-weight: 500;
+         color: var(--muted);
+         margin-bottom: .4rem;
+      }
 
-    .btn-danger {
-      background: rgba(248,113,113,.15);
-      color: var(--danger);
-      border: 1px solid rgba(248,113,113,.3);
-    }
+      .field input {
+         width: 100%;
+         padding: .65rem .9rem;
+         font-family: 'SF Mono', 'Fira Code', monospace;
+         font-size: .82rem;
+         background: var(--surface2);
+         border: 1px solid var(--border);
+         border-radius: 8px;
+         color: var(--text);
+         outline: none;
+         transition: border-color .2s;
+      }
 
-    /* ── Empty / loading states ─────────────────────────────── */
-    .empty-state {
-      grid-column: 1 / -1;
-      text-align: center;
-      padding: 4rem 1rem;
-      color: var(--muted);
-    }
-    .empty-state svg { opacity: .25; margin-bottom: 1rem; }
+      .field input:focus {
+         border-color: var(--accent);
+      }
 
-    /* ── Skeleton loader ────────────────────────────────────── */
-    .skeleton {
-      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-      border-radius: var(--radius);
-    }
-    @keyframes shimmer { to { background-position: -200% 0; } }
+      .settings-actions {
+         display: flex;
+         gap: .75rem;
+         justify-content: flex-end;
+         margin-top: 1.6rem;
+      }
 
-    .skeleton-card { height: 290px; }
+      .btn {
+         padding: .6rem 1.2rem;
+         border-radius: 8px;
+         border: none;
+         font-family: inherit;
+         font-size: .85rem;
+         font-weight: 500;
+         cursor: pointer;
+         transition: opacity .15s, transform .1s;
+      }
 
-    /* ── Responsive ─────────────────────────────────────────── */
-    @media (max-width: 600px) {
-      header { padding: .8rem 1rem; }
-      .grid  { padding: .5rem 1rem 2rem; gap: 1rem; }
-      .logo  { display: none; }
-    }
-  </style>
+      .btn:hover {
+         opacity: .88;
+      }
+
+      .btn:active {
+         transform: scale(.97);
+      }
+
+      .btn-ghost {
+         background: var(--surface2);
+         color: var(--muted);
+         border: 1px solid var(--border);
+      }
+
+      .btn-primary {
+         background: var(--accent);
+         color: #fff;
+      }
+
+      .btn-danger {
+         background: rgba(248, 113, 113, .15);
+         color: var(--danger);
+         border: 1px solid rgba(248, 113, 113, .3);
+      }
+
+      /* ── Empty / loading states ─────────────────────────────── */
+      .empty-state {
+         grid-column: 1 / -1;
+         text-align: center;
+         padding: 4rem 1rem;
+         color: var(--muted);
+      }
+
+      .empty-state svg {
+         opacity: .25;
+         margin-bottom: 1rem;
+      }
+
+      /* ── Skeleton loader ────────────────────────────────────── */
+      .skeleton {
+         background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+         background-size: 200% 100%;
+         animation: shimmer 1.4s infinite;
+         border-radius: var(--radius);
+      }
+
+      @keyframes shimmer {
+         to {
+            background-position: -200% 0;
+         }
+      }
+
+      .skeleton-card {
+         height: 290px;
+      }
+
+      /* ── Responsive ─────────────────────────────────────────── */
+      @media (max-width: 600px) {
+         header {
+            padding: .8rem 1rem;
+         }
+
+         .grid {
+            padding: .5rem 1rem 2rem;
+            gap: 1rem;
+         }
+
+         .logo {
+            display: none;
+         }
+      }
+   </style>
 </head>
 
 <body>
 
-  <!-- ── Header ── -->
-  <header>
-    <span class="logo">ImagePipeline</span>
+   <!-- ── Header ── -->
+   <header>
+      <span class="logo">ImagePipeline</span>
 
-    <div class="search-wrap">
-      <svg class="search-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-      <input type="text" id="searchBar" placeholder="Search images (fuzzy, e.g. 'dok')" autocomplete="off" spellcheck="false">
-    </div>
-
-    <button id="settingsBtn" title="Configure endpoints">⚙</button>
-  </header>
-
-  <!-- ── Status ── -->
-  <div id="status">Type to search…</div>
-
-  <!-- ── Results ── -->
-  <main class="grid" id="resultsGrid" role="list" aria-live="polite"></main>
-
-  <!-- ── Settings modal ── -->
-  <div id="settingsOverlay" role="dialog" aria-modal="true" aria-label="Endpoint settings">
-    <div class="settings-modal">
-      <h2>⚙ Endpoint Configuration</h2>
-      <p class="hint">
-        Values are pre-filled from <code>pulumi stack output</code> (via <code>scripts/configure.sh</code>).
-        Override here and save — settings persist in <code>localStorage</code> across sessions.
-      </p>
-
-      <div class="field">
-        <label for="cfgOpenSearch">OpenSearch Search URL</label>
-        <input id="cfgOpenSearch" type="url" placeholder="http://&lt;ip&gt;:9200/images/_search">
+      <div class="search-wrap">
+         <svg class="search-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+         </svg>
+         <input type="text" id="searchBar" placeholder="Search images (fuzzy, e.g. 'dok')" autocomplete="off"
+            spellcheck="false">
       </div>
 
-      <div class="field">
-        <label for="cfgS3">S3 Bucket Base URL</label>
-        <input id="cfgS3" type="url" placeholder="https://&lt;bucket&gt;.s3.&lt;region&gt;.amazonaws.com/">
+      <button id="settingsBtn" title="Configure endpoints">⚙</button>
+   </header>
+
+   <!-- ── Status ── -->
+   <div id="status">Type to search…</div>
+
+   <!-- ── Results ── -->
+   <main class="grid" id="resultsGrid" role="list" aria-live="polite"></main>
+
+   <!-- ── Settings modal ── -->
+   <div id="settingsOverlay" role="dialog" aria-modal="true" aria-label="Endpoint settings">
+      <div class="settings-modal">
+         <h2>⚙ Endpoint Configuration</h2>
+         <p class="hint">
+            Values are pre-filled from <code>pulumi stack output</code> (via <code>scripts/configure.sh</code>).
+            Override here and save — settings persist in <code>localStorage</code> across sessions.
+         </p>
+
+         <div class="field">
+            <label for="cfgOpenSearch">OpenSearch Search URL</label>
+            <input id="cfgOpenSearch" type="url" placeholder="http://&lt;ip&gt;:9200/images/_search">
+         </div>
+
+         <div class="field">
+            <label for="cfgS3">S3 Bucket Base URL</label>
+            <input id="cfgS3" type="url" placeholder="https://&lt;bucket&gt;.s3.&lt;region&gt;.amazonaws.com/">
+         </div>
+
+         <div class="settings-actions">
+            <button class="btn btn-danger" id="resetDefaults">Reset to defaults</button>
+            <button class="btn btn-ghost" id="cancelSettings">Cancel</button>
+            <button class="btn btn-primary" id="saveSettings">Save &amp; apply</button>
+         </div>
       </div>
+   </div>
 
-      <div class="settings-actions">
-        <button class="btn btn-danger" id="resetDefaults">Reset to defaults</button>
-        <button class="btn btn-ghost"  id="cancelSettings">Cancel</button>
-        <button class="btn btn-primary" id="saveSettings">Save &amp; apply</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // ─── Config resolution order:
-    //   1. localStorage overrides (user-set via settings panel)
-    //   2. window.__PULUMI_CONFIG__ (injected by scripts/configure.sh)
-    //   3. Hard-coded fallback (same values as the pulumi-config block above)
-    const DEFAULTS = window.__PULUMI_CONFIG__ || {
-      opensearchUrl: "http://3.120.37.203:9200/images/_search",
-      s3BucketUrl:   "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
-    };
-
-    function getConfig() {
-      return {
-        opensearchUrl: localStorage.getItem("cfg.opensearchUrl") || DEFAULTS.opensearchUrl,
-        s3BucketUrl:   localStorage.getItem("cfg.s3BucketUrl")   || DEFAULTS.s3BucketUrl,
-      };
-    }
-
-    // ─── DOM refs ─────────────────────────────────────────────
-    const searchBar      = document.getElementById("searchBar");
-    const resultsGrid    = document.getElementById("resultsGrid");
-    const statusDiv      = document.getElementById("status");
-    const settingsBtn    = document.getElementById("settingsBtn");
-    const overlay        = document.getElementById("settingsOverlay");
-    const cfgOpenSearch  = document.getElementById("cfgOpenSearch");
-    const cfgS3          = document.getElementById("cfgS3");
-    const saveBtn        = document.getElementById("saveSettings");
-    const cancelBtn      = document.getElementById("cancelSettings");
-    const resetBtn       = document.getElementById("resetDefaults");
-
-    // ─── Settings panel ───────────────────────────────────────
-    function openSettings() {
-      const cfg = getConfig();
-      cfgOpenSearch.value = cfg.opensearchUrl;
-      cfgS3.value         = cfg.s3BucketUrl;
-      overlay.classList.add("open");
-      cfgOpenSearch.focus();
-    }
-
-    function closeSettings() { overlay.classList.remove("open"); }
-
-    settingsBtn.addEventListener("click", openSettings);
-    cancelBtn.addEventListener("click", closeSettings);
-    overlay.addEventListener("click", e => { if (e.target === overlay) closeSettings(); });
-    document.addEventListener("keydown", e => { if (e.key === "Escape") closeSettings(); });
-
-    saveBtn.addEventListener("click", () => {
-      const u = cfgOpenSearch.value.trim();
-      const s = cfgS3.value.trim();
-      if (!u || !s) return;
-      localStorage.setItem("cfg.opensearchUrl", u);
-      localStorage.setItem("cfg.s3BucketUrl", s);
-      closeSettings();
-      // Re-run current query with new config
-      const q = searchBar.value.trim();
-      if (q.length >= 2) performSearch(q);
-    });
-
-    resetBtn.addEventListener("click", () => {
-      localStorage.removeItem("cfg.opensearchUrl");
-      localStorage.removeItem("cfg.s3BucketUrl");
-      cfgOpenSearch.value = DEFAULTS.opensearchUrl;
-      cfgS3.value         = DEFAULTS.s3BucketUrl;
-    });
-
-    // ─── Search logic ──────────────────────────────────────────
-    searchBar.addEventListener("input", debounce(e => {
-      const q = e.target.value.trim();
-      if (q.length < 2) {
-        resultsGrid.innerHTML = "";
-        statusDiv.className = "";
-        statusDiv.innerText = "Type to search…";
-        return;
-      }
-      showSkeletons();
-      performSearch(q);
-    }, 280));
-
-    async function performSearch(term) {
-      const { opensearchUrl, s3BucketUrl } = getConfig();
-      statusDiv.className = "";
-      statusDiv.innerText = "Searching…";
-
-      const payload = {
-        query: {
-          multi_match: {
-            query:     term,
-            fields:    ["labels", "parents"],
-            fuzziness: "AUTO"
-          }
-        }
+   <script>
+      // ─── Config resolution order:
+      //   1. localStorage overrides (user-set via settings panel)
+      //   2. window.__PULUMI_CONFIG__ (injected by scripts/configure.sh)
+      //   3. Hard-coded fallback (same values as the pulumi-config block above)
+      const DEFAULTS = window.__PULUMI_CONFIG__ || {
+         opensearchUrl: "http://3.120.37.203:9200/images/_search",
+         s3BucketUrl: "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
       };
 
-      try {
-        const res = await fetch(opensearchUrl, {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify(payload)
-        });
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const data = await res.json();
-        renderResults(data.hits.hits, term, s3BucketUrl);
-      } catch (err) {
-        console.error(err);
-        resultsGrid.innerHTML = "";
-        statusDiv.className = "error";
-        statusDiv.innerHTML =
-          `Search failed: ${err.message}. ` +
-          `Check the <button onclick="openSettings()" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:underline;font:inherit;padding:0">endpoint config</button> or CORS settings.`;
+      function getConfig() {
+         return {
+            opensearchUrl: localStorage.getItem("cfg.opensearchUrl") || DEFAULTS.opensearchUrl,
+            s3BucketUrl: localStorage.getItem("cfg.s3BucketUrl") || DEFAULTS.s3BucketUrl,
+         };
       }
-    }
 
-    function renderResults(hits, term, s3BucketUrl) {
-      resultsGrid.innerHTML = "";
+      // ─── DOM refs ─────────────────────────────────────────────
+      const searchBar = document.getElementById("searchBar");
+      const resultsGrid = document.getElementById("resultsGrid");
+      const statusDiv = document.getElementById("status");
+      const settingsBtn = document.getElementById("settingsBtn");
+      const overlay = document.getElementById("settingsOverlay");
+      const cfgOpenSearch = document.getElementById("cfgOpenSearch");
+      const cfgS3 = document.getElementById("cfgS3");
+      const saveBtn = document.getElementById("saveSettings");
+      const cancelBtn = document.getElementById("cancelSettings");
+      const resetBtn = document.getElementById("resetDefaults");
 
-      if (!hits.length) {
-        statusDiv.innerText = "No matching images found.";
-        resultsGrid.innerHTML = `
+      // ─── Settings panel ───────────────────────────────────────
+      function openSettings() {
+         const cfg = getConfig();
+         cfgOpenSearch.value = cfg.opensearchUrl;
+         cfgS3.value = cfg.s3BucketUrl;
+         overlay.classList.add("open");
+         cfgOpenSearch.focus();
+      }
+
+      function closeSettings() { overlay.classList.remove("open"); }
+
+      settingsBtn.addEventListener("click", openSettings);
+      cancelBtn.addEventListener("click", closeSettings);
+      overlay.addEventListener("click", e => { if (e.target === overlay) closeSettings(); });
+      document.addEventListener("keydown", e => { if (e.key === "Escape") closeSettings(); });
+
+      saveBtn.addEventListener("click", () => {
+         const u = cfgOpenSearch.value.trim();
+         const s = cfgS3.value.trim();
+         if (!u || !s) return;
+         localStorage.setItem("cfg.opensearchUrl", u);
+         localStorage.setItem("cfg.s3BucketUrl", s);
+         closeSettings();
+         // Re-run current query with new config
+         const q = searchBar.value.trim();
+         if (q.length >= 2) performSearch(q);
+      });
+
+      resetBtn.addEventListener("click", () => {
+         localStorage.removeItem("cfg.opensearchUrl");
+         localStorage.removeItem("cfg.s3BucketUrl");
+         cfgOpenSearch.value = DEFAULTS.opensearchUrl;
+         cfgS3.value = DEFAULTS.s3BucketUrl;
+      });
+
+      // ─── Search logic ──────────────────────────────────────────
+      searchBar.addEventListener("input", debounce(e => {
+         const q = e.target.value.trim();
+         if (q.length < 2) {
+            resultsGrid.innerHTML = "";
+            statusDiv.className = "";
+            statusDiv.innerText = "Type to search…";
+            return;
+         }
+         showSkeletons();
+         performSearch(q);
+      }, 280));
+
+      async function performSearch(term) {
+         const { opensearchUrl, s3BucketUrl } = getConfig();
+         statusDiv.className = "";
+         statusDiv.innerText = "Searching…";
+
+         const payload = {
+            query: {
+               bool: {
+                  must: [
+                     {
+                        multi_match: {
+                           query: term,
+                           fields: ["labels^3", "parents"],
+                           type: "best_fields"
+                        }
+                     }
+                  ],
+                  should: [
+                     {
+                        term: {
+                           labels: {
+                              value: term.toLowerCase(),
+                              boost: 5.0
+                           }
+                        }
+                     }
+                  ]
+               }
+            }
+         };
+
+         try {
+            // Force OpenSearch to calculate global term frequencies across all shards 
+            // to eliminate local score inflation anomalies.
+            const urlWithDfs = opensearchUrl.includes("?")
+               ? `${opensearchUrl}&search_type=dfs_query_then_fetch`
+               : `${opensearchUrl}?search_type=dfs_query_then_fetch`;
+
+            const res = await fetch(urlWithDfs, {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            const data = await res.json();
+            renderResults(data.hits.hits, term, s3BucketUrl);
+         } catch (err) {
+            console.error(err);
+            resultsGrid.innerHTML = "";
+            statusDiv.className = "error";
+            statusDiv.innerHTML =
+               `Search failed: ${err.message}. ` +
+               `Check the <button onclick="openSettings()" style="background:none;border:none;color:inherit;cursor:pointer;text-decoration:underline;font:inherit;padding:0">endpoint config</button> or CORS settings.`;
+         }
+      }
+
+      function renderResults(hits, term, s3BucketUrl) {
+         resultsGrid.innerHTML = "";
+
+         if (!hits.length) {
+            statusDiv.innerText = "No matching images found.";
+            resultsGrid.innerHTML = `
           <div class="empty-state">
             <svg width="64" height="64" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
             <p>No results for <strong>"${escHtml(term)}"</strong></p>
           </div>`;
-        return;
-      }
+            return;
+         }
 
-      statusDiv.innerText = `${hits.length} result${hits.length !== 1 ? "s" : ""}`;
+         statusDiv.innerText = `${hits.length} result${hits.length !== 1 ? "s" : ""}`;
 
-      hits.forEach((hit, i) => {
-        const src   = hit._source;
-        const imgUrl = s3BucketUrl + src.image_key;
-        const score  = hit._score != null ? hit._score.toFixed(2) : "—";
+         hits.forEach((hit, i) => {
+            const src = hit._source;
+            const imgUrl = s3BucketUrl + src.image_key;
+            const score = hit._score != null ? hit._score.toFixed(2) : "—";
 
-        const allTags = [...new Set([...(src.labels || []), ...(src.parents || [])])];
-        const tagsHtml = allTags.map(tag => {
-          const match = term && tag.toLowerCase().includes(term.toLowerCase());
-          return `<span class="tag${match ? " match" : ""}">${escHtml(tag)}</span>`;
-        }).join("");
+            const allTags = [...new Set([...(src.labels || []), ...(src.parents || [])])];
+            const tagsHtml = allTags.map(tag => {
+               const match = term && tag.toLowerCase().includes(term.toLowerCase());
+               return `<span class="tag${match ? " match" : ""}">${escHtml(tag)}</span>`;
+            }).join("");
 
-        const card = document.createElement("div");
-        card.className = "card";
-        card.style.animationDelay = `${i * 35}ms`;
-        card.setAttribute("role", "listitem");
-        card.innerHTML = `
+            const card = document.createElement("div");
+            card.className = "card";
+            card.style.animationDelay = `${i * 35}ms`;
+            card.setAttribute("role", "listitem");
+            card.innerHTML = `
           <img class="card-img" src="${escHtml(imgUrl)}" alt="Search result"
                onerror="this.onerror=null;this.src='https://placehold.co/400x300/1b1f2b/64748b?text=Not+Found';">
           <div class="card-body">
@@ -558,28 +651,29 @@
             </div>
             <div class="tag-group">${tagsHtml}</div>
           </div>`;
-        resultsGrid.appendChild(card);
-      });
-    }
+            resultsGrid.appendChild(card);
+         });
+      }
 
-    // ─── Skeleton placeholders ──────────────────────────────────
-    function showSkeletons(n = 6) {
-      resultsGrid.innerHTML = Array.from({ length: n },
-        () => `<div class="skeleton skeleton-card"></div>`).join("");
-    }
+      // ─── Skeleton placeholders ──────────────────────────────────
+      function showSkeletons(n = 6) {
+         resultsGrid.innerHTML = Array.from({ length: n },
+            () => `<div class="skeleton skeleton-card"></div>`).join("");
+      }
 
-    // ─── Utilities ─────────────────────────────────────────────
-    function debounce(fn, ms) {
-      let t;
-      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-    }
+      // ─── Utilities ─────────────────────────────────────────────
+      function debounce(fn, ms) {
+         let t;
+         return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+      }
 
-    function escHtml(str) {
-      return String(str)
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
-  </script>
+      function escHtml(str) {
+         return String(str)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      }
+   </script>
 
 </body>
+
 </html>
