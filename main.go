@@ -38,6 +38,13 @@ func main() {
 		ctx.Export("bucketName", bucket.ID())
 		ctx.Export("lambdaFunctionName", fn.Name)
 
+		// Full S3 base URL consumed by the search UI (index.html / configure.sh).
+		s3BucketUrl := pulumi.Sprintf(
+			"https://%s.s3.eu-central-1.amazonaws.com/",
+			bucket.ID(),
+		)
+		ctx.Export("s3BucketUrl", s3BucketUrl)
+
 		return nil
 	})
 }

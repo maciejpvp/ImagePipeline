@@ -37,24 +37,30 @@ dnf install -y docker
 systemctl enable --now docker
 
 # ---------------------------------------------------------------------------
-# 3. Launch OpenSearch in a single-node Docker container
-#
-#    Key environment variables:
-#      OPENSEARCH_JAVA_OPTS   — caps JVM heap at 256 MiB.  Keeping Xms==Xmx
-#                               avoids expensive heap-resize GC pauses and
-#                               prevents the JVM from grabbing more RAM at
-#                               runtime, which is critical on a 1 GiB host.
-#      DISABLE_SECURITY_PLUGIN — skips TLS negotiation and the internal user
-#                               database, saving ~80-120 MiB of RAM that the
-#                               security plugin would otherwise consume.
-#      discovery.type         — tells OpenSearch not to wait for peer nodes,
-#                               eliminating cluster-formation timeout loops.
+# 3. Create a custom opensearch.yml for CORS support
+# ---------------------------------------------------------------------------
+mkdir -p /etc/opensearch
+cat << 'EOF' > /etc/opensearch/opensearch.yml
+cluster.name: docker-cluster
+network.host: 0.0.0.0
+
+# CORS settings
+http.cors.enabled: true
+http.cors.allow-origin: "*"
+http.cors.allow-headers: "X-Requested-With,Content-Type,Content-Length,Authorization"
+http.cors.allow-methods: "OPTIONS,HEAD,GET,POST,PUT,DELETE"
+EOF
+chmod 644 /etc/opensearch/opensearch.yml
+
+# ---------------------------------------------------------------------------
+# 4. Launch OpenSearch in a single-node Docker container
 # ---------------------------------------------------------------------------
 docker run -d \
   --name opensearch \
   --restart unless-stopped \
   -p 9200:9200 \
   -p 9600:9600 \
+  -v /etc/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml \
   -e "OPENSEARCH_JAVA_OPTS=-Xms256m -Xmx256m" \
   -e "DISABLE_SECURITY_PLUGIN=true" \
   -e "discovery.type=single-node" \
@@ -152,7 +158,8 @@ func createInstance(ctx *pulumi.Context, env string, sg *ec2.SecurityGroup) (*ec
 
 		VpcSecurityGroupIds: pulumi.StringArray{sg.ID()},
 
-		UserData: pulumi.String(userDataScript),
+		UserData:                pulumi.String(userDataScript),
+		UserDataReplaceOnChange: pulumi.Bool(true),
 
 		RootBlockDevice: &ec2.InstanceRootBlockDeviceArgs{
 			VolumeType: pulumi.String("gp3"),

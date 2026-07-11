@@ -55,5 +55,36 @@ func CreateUploadsBucket(ctx *pulumi.Context, env string, onCreateLambda *lambda
 		return nil, err
 	}
 
+	publicAccessBlock, err := s3.NewBucketPublicAccessBlock(ctx, "bucketPublicAccessBlock", &s3.BucketPublicAccessBlockArgs{
+		Bucket:                bucket.ID(),
+		BlockPublicAcls:       pulumi.Bool(true),
+		BlockPublicPolicy:     pulumi.Bool(false),
+		IgnorePublicAcls:      pulumi.Bool(true),
+		RestrictPublicBuckets: pulumi.Bool(false),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s3.NewBucketPolicy(ctx, "bucketPolicy", &s3.BucketPolicyArgs{
+		Bucket: bucket.ID(),
+		Policy: pulumi.Sprintf(`{
+			"Version": "2012-10-17",
+			"Statement": [
+				{
+					"Sid": "PublicReadGetObject",
+					"Effect": "Allow",
+					"Principal": "*",
+					"Action": "s3:GetObject",
+					"Resource": "arn:aws:s3:::%s/*"
+				}
+			]
+		}`, bucket.ID()),
+	}, pulumi.DependsOn([]pulumi.Resource{publicAccessBlock}))
+	if err != nil {
+		return nil, err
+	}
+
 	return bucket, nil
 }
+
