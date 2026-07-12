@@ -6,8 +6,9 @@ import (
 )
 
 // userDataScript is a cloud-init script executed on first boot.
-// It installs Docker, tunes the kernel for OpenSearch, and starts
-// a single-node OpenSearch container with strict memory limits.
+// It installs Docker, tunes the kernel for OpenSearch, starts
+// a single-node OpenSearch container with strict memory limits,
+// and provisions the k-NN index mapping for Titan Multimodal Embeddings.
 //
 // Memory rationale for t3.micro (1 GiB RAM):
 //   - The JVM heap is capped at 256 MiB (-Xms256m -Xmx256m).
@@ -65,6 +66,43 @@ docker run -d \
   -e "DISABLE_SECURITY_PLUGIN=true" \
   -e "discovery.type=single-node" \
   opensearchproject/opensearch:latest
+
+# ---------------------------------------------------------------------------
+# 5. Wait for OpenSearch REST API & Apply k-NN Index Template
+# ---------------------------------------------------------------------------
+echo "Waiting for OpenSearch cluster to become responsive..."
+until curl -s http://localhost:9200 > /dev/null; do
+    sleep 5
+done
+
+echo "OpenSearch is up. Applying k-NN index template for 'images'..."
+curl -X PUT "http://localhost:9200/_index_template/images_template" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "index_patterns": ["images*"],
+    "template": {
+      "settings": {
+        "index.knn": true
+      },
+      "mappings": {
+        "properties": {
+          "image_key": { "type": "keyword" },
+          "labels": { "type": "keyword" },
+          "categories": { "type": "keyword" },
+          "parents": { "type": "keyword" },
+          "image_vector": {
+            "type": "knn_vector",
+            "dimension": 1024,
+            "method": {
+              "name": "hnsw",
+              "space_type": "cosinesimil",
+              "engine": "nmslib"
+            }
+          }
+        }
+      }
+    }
+  }'
 `
 
 type Resources struct {
@@ -162,9 +200,7 @@ func createInstance(ctx *pulumi.Context, env string, sg *ec2.SecurityGroup) (*ec
 		UserDataReplaceOnChange: pulumi.Bool(true),
 
 		RootBlockDevice: &ec2.InstanceRootBlockDeviceArgs{
-			VolumeType: pulumi.String("gp3"),
-			// The AL2023 AMI snapshot requires >= 30 GiB; 30 GiB is also the
-			// exact Free Tier EBS allowance, so this is both the floor and ceiling.
+			VolumeType:          pulumi.String("gp3"),
 			VolumeSize:          pulumi.Int(30),
 			DeleteOnTermination: pulumi.Bool(true),
 		},

@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 
+	"lambda-on-create/bedrock"
 	"lambda-on-create/internal/osstore"
 	"lambda-on-create/internal/recognition"
 	"lambda-on-create/internal/s3store"
@@ -54,7 +55,12 @@ func (a *App) processRecord(ctx context.Context, record events.S3EventRecord) er
 			return fmt.Errorf("get JPEG bytes for %q: %w", key, err)
 		}
 	} else {
-		slog.Info("Native JPEG detected, skipping conversion step", "key", key)
+		slog.Info("Native JPEG detected, fetching raw bytes", "key", key)
+		var err error
+		imageBytes, err = s3store.GetRawBytes(ctx, bucket, key)
+		if err != nil {
+			return fmt.Errorf("get raw bytes for %q: %w", key, err)
+		}
 	}
 
 	result, err := recognition.Detect(ctx, a.moderationCfg, bucket, key, imageBytes, isNativeJPG)
@@ -77,8 +83,15 @@ func (a *App) processRecord(ctx context.Context, record events.S3EventRecord) er
 	}
 	slog.Info("Image labels detected", "key", key, "labels", labels)
 
+	slog.Info("Generating image embedding vector via Bedrock", "key", key)
+	vector, err := bedrock.GetImageEmbedding(ctx, imageBytes)
+	if err != nil {
+		return fmt.Errorf("get image embedding for %q: %w", key, err)
+	}
+
 	imgRecord := buildRecord(key, labels)
-	slog.Info("Image record", "record", imgRecord)
+	imgRecord.ImageVector = vector
+	slog.Info("Image record created with embedding vector", "key", key, "vector_length", len(vector))
 
 	if err := osstore.IndexRecord(ctx, imgRecord); err != nil {
 		return fmt.Errorf("index record for %q: %w", key, err)

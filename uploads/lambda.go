@@ -81,6 +81,23 @@ func applyS3PermissionsPolicy(ctx *pulumi.Context, name string, roleName pulumi.
 	return err
 }
 
+func applyBedrockPolicy(ctx *pulumi.Context, name string, roleName pulumi.StringInput) error {
+	_, err := iam.NewRolePolicy(ctx, name, &iam.RolePolicyArgs{
+		Role: roleName,
+		Policy: pulumi.String(`{
+			"Version": "2012-10-17",
+			"Statement": [{
+				"Sid": "AllowTitanEmbeddings",
+				"Effect": "Allow",
+				"Action": "bedrock:InvokeModel",
+				"Resource": "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-image-v1"
+			}]
+		}`),
+	})
+	return err
+}
+
+
 func CreateOnCreateLambda(ctx *pulumi.Context, env string, opensearchEndpoint pulumi.StringInput) (*lambda.Function, error) {
 	if err := build.BuildLambda(); err != nil {
 		return nil, err
@@ -105,6 +122,12 @@ func CreateOnCreateLambda(ctx *pulumi.Context, env string, opensearchEndpoint pu
 	if err != nil {
 		return nil, err
 	}
+
+	err = applyBedrockPolicy(ctx, "lambdaBedrockPolicy", lambdaRole.Name)
+	if err != nil {
+		return nil, err
+	}
+
 
 	fn, err := lambda.NewFunction(ctx, "onCreateLambda", &lambda.FunctionArgs{
 		Runtime: pulumi.String("provided.al2023"),

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 
 	_ "image/png"
 
@@ -57,3 +58,21 @@ func Delete(ctx context.Context, bucket, key string) error {
 	}
 	return nil
 }
+
+func GetRawBytes(ctx context.Context, bucket, key string) ([]byte, error) {
+	obj, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch s3://%s/%s: %w", bucket, key, err)
+	}
+	defer obj.Body.Close()
+
+	data, err := io.ReadAll(obj.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object body: %w", err)
+	}
+	return data, nil
+}
+
