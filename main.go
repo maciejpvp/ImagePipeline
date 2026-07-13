@@ -2,6 +2,7 @@ package main
 
 import (
 	"ImagePipeline/opensearch"
+	"ImagePipeline/search"
 	"ImagePipeline/uploads"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -44,6 +45,20 @@ func main() {
 			bucket.ID(),
 		)
 		ctx.Export("s3BucketUrl", s3BucketUrl)
+
+		// --- Search API (API Gateway + Search Lambda) ---
+		searchFn, err := search.CreateSearchLambda(ctx, env, opensearchEndpoint)
+		if err != nil {
+			return err
+		}
+
+		_, stage, err := search.CreateApiGateway(ctx, env, searchFn)
+		if err != nil {
+			return err
+		}
+
+		searchApiUrl := pulumi.Sprintf("%s/search", stage.InvokeUrl)
+		ctx.Export("searchApiUrl", searchApiUrl)
 
 		return nil
 	})

@@ -21,8 +21,8 @@
   -->
    <script id="pulumi-config">
       window.__PULUMI_CONFIG__ = {
-         opensearchUrl: "http://3.120.37.203:9200/images/_search",
-         s3BucketUrl: "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
+         searchApiUrl: "https://7gs5bjxnv9.execute-api.us-east-1.amazonaws.com/dev/search",
+         s3BucketUrl: "https://uploads-bucket-4c1e6d.s3.us-east-1.amazonaws.com/"
       };
    </script>
 
@@ -457,8 +457,9 @@
          </p>
 
          <div class="field">
-            <label for="cfgOpenSearch">OpenSearch Search URL</label>
-            <input id="cfgOpenSearch" type="url" placeholder="http://&lt;ip&gt;:9200/images/_search">
+            <label for="cfgSearchApi">Search API URL</label>
+            <input id="cfgSearchApi" type="url"
+               placeholder="https://&lt;api-id&gt;.execute-api.&lt;region&gt;.amazonaws.com/dev/search">
          </div>
 
          <div class="field">
@@ -480,13 +481,13 @@
       //   2. window.__PULUMI_CONFIG__ (injected by scripts/configure.sh)
       //   3. Hard-coded fallback (same values as the pulumi-config block above)
       const DEFAULTS = window.__PULUMI_CONFIG__ || {
-         opensearchUrl: "http://3.120.37.203:9200/images/_search",
+         searchApiUrl: "https://7gs5bjxnv9.execute-api.us-east-1.amazonaws.com/dev/search",
          s3BucketUrl: "https://uploads-bucket-4c1e6d.s3.eu-central-1.amazonaws.com/"
       };
 
       function getConfig() {
          return {
-            opensearchUrl: localStorage.getItem("cfg.opensearchUrl") || DEFAULTS.opensearchUrl,
+            searchApiUrl: localStorage.getItem("cfg.searchApiUrl") || DEFAULTS.searchApiUrl,
             s3BucketUrl: localStorage.getItem("cfg.s3BucketUrl") || DEFAULTS.s3BucketUrl,
          };
       }
@@ -497,7 +498,7 @@
       const statusDiv = document.getElementById("status");
       const settingsBtn = document.getElementById("settingsBtn");
       const overlay = document.getElementById("settingsOverlay");
-      const cfgOpenSearch = document.getElementById("cfgOpenSearch");
+      const cfgSearchApi = document.getElementById("cfgSearchApi");
       const cfgS3 = document.getElementById("cfgS3");
       const saveBtn = document.getElementById("saveSettings");
       const cancelBtn = document.getElementById("cancelSettings");
@@ -506,10 +507,10 @@
       // ─── Settings panel ───────────────────────────────────────
       function openSettings() {
          const cfg = getConfig();
-         cfgOpenSearch.value = cfg.opensearchUrl;
+         cfgSearchApi.value = cfg.searchApiUrl;
          cfgS3.value = cfg.s3BucketUrl;
          overlay.classList.add("open");
-         cfgOpenSearch.focus();
+         cfgSearchApi.focus();
       }
 
       function closeSettings() { overlay.classList.remove("open"); }
@@ -552,53 +553,36 @@
       }, 280));
 
       async function performSearch(term) {
-         const { opensearchUrl, s3BucketUrl } = getConfig();
+         const { searchApiUrl, s3BucketUrl } = getConfig();
          statusDiv.className = "";
          statusDiv.innerText = "Searching…";
 
-         const payload = {
-            query: {
-               bool: {
-                  must: [
-                     {
-                        multi_match: {
-                           query: term,
-                           fields: ["labels^3", "parents"],
-                           type: "best_fields"
-                        }
-                     }
-                  ],
-                  should: [
-                     {
-                        term: {
-                           labels: {
-                              value: term.toLowerCase(),
-                              boost: 5.0
-                           }
-                        }
-                     }
-                  ]
-               }
-            }
-         };
-
          try {
-            // Force OpenSearch to calculate global term frequencies across all shards 
-            // to eliminate local score inflation anomalies.
-            const urlWithDfs = opensearchUrl.includes("?")
-               ? `${opensearchUrl}&search_type=dfs_query_then_fetch`
-               : `${opensearchUrl}?search_type=dfs_query_then_fetch`;
+            const url = new URL(searchApiUrl);
+            url.searchParams.set("q", term);
 
-            const res = await fetch(urlWithDfs, {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify(payload)
+            const res = await fetch(url.toString(), {
+               method: "GET",
+               headers: { "Accept": "application/json" }
             });
 
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
             const data = await res.json();
-            renderResults(data.hits.hits, term, s3BucketUrl);
+
+            // Map the search Lambda's SearchResult format to the format renderResults expects
+            const hits = data.map(item => ({
+               _id: item.image_key.split('.')[0] || item.image_key,
+               _score: item.score,
+               _source: {
+                  image_key: item.image_key,
+                  labels: item.labels,
+                  categories: item.categories,
+                  parents: item.parents
+               }
+            }));
+
+            renderResults(hits, term, s3BucketUrl);
          } catch (err) {
             console.error(err);
             resultsGrid.innerHTML = "";

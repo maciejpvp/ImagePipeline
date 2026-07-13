@@ -31,7 +31,7 @@ PULUMI_JSON=$(pulumi stack output --json $STACK_FLAG 2>/dev/null) || {
   exit 1
 }
 
-OPENSEARCH_ENDPOINT=$(echo "$PULUMI_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['opensearchEndpoint']+'/images/_search')")
+SEARCH_API_URL=$(echo "$PULUMI_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('searchApiUrl', ''))")
 # s3BucketUrl is exported by main.go; fall back to constructing it from
 # bucketName for stacks deployed before that export was added.
 S3_BUCKET_URL=$(echo "$PULUMI_JSON" | python3 -c "
@@ -45,27 +45,27 @@ else:
     print(f'https://{bucket}.s3.eu-central-1.amazonaws.com/')
 ")
 
-echo "   opensearchUrl : $OPENSEARCH_ENDPOINT"
+echo "   searchApiUrl  : $SEARCH_API_URL"
 echo "   s3BucketUrl   : $S3_BUCKET_URL"
 
 # ── Inject into the <script id="pulumi-config"> block ─────────
 # Replace everything between the opening <script> and </script>
 # tags whose id is "pulumi-config".
-python3 - "$INDEX_HTML" "$OPENSEARCH_ENDPOINT" "$S3_BUCKET_URL" <<'PYEOF'
+python3 - "$INDEX_HTML" "$SEARCH_API_URL" "$S3_BUCKET_URL" <<'PYEOF'
 import sys, re
 
-html_file, os_url, s3_url = sys.argv[1], sys.argv[2], sys.argv[3]
+html_file, search_url, s3_url = sys.argv[1], sys.argv[2], sys.argv[3]
 
 with open(html_file) as f:
     content = f.read()
 
 new_block = (
-    '<script id="pulumi-config">\n'
-    '    window.__PULUMI_CONFIG__ = {\n'
-    f'      opensearchUrl: "{os_url}",\n'
-    f'      s3BucketUrl:   "{s3_url}"\n'
-    '    };\n'
-    '  </script>'
+    '   <script id="pulumi-config">\n'
+    '      window.__PULUMI_CONFIG__ = {\n'
+    f'         searchApiUrl: "{search_url}",\n'
+    f'         s3BucketUrl:  "{s3_url}"\n'
+    '      };\n'
+    '   </script>'
 )
 
 # Match the entire <script id="pulumi-config">…</script> block

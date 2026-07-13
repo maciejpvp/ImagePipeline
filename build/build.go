@@ -10,19 +10,31 @@ import (
 const (
 	LambdaSrcDir    = "./lambda/on-create"
 	LambdaOutputDir = "./lambda/on-create/bootstrap"
+
+	SearchLambdaSrcDir    = "./lambda/search"
+	SearchLambdaOutputDir = "./lambda/search/bootstrap"
 )
 
-// BuildLambda builds the Go binary for the Lambda function.
+// BuildLambda builds the Go binary for the on-create Lambda function.
 func BuildLambda() error {
-	fmt.Println(">>> Building Lambda binary...")
+	return buildGoLambda(LambdaSrcDir, LambdaOutputDir)
+}
 
-	absOutputDir, err := filepath.Abs(LambdaOutputDir)
+// BuildSearchLambda builds the Go binary for the search Lambda function.
+func BuildSearchLambda() error {
+	return buildGoLambda(SearchLambdaSrcDir, SearchLambdaOutputDir)
+}
+
+func buildGoLambda(srcDir, outputDir string) error {
+	fmt.Printf(">>> Building Lambda binary for %s...\n", srcDir)
+
+	absOutputDir, err := filepath.Abs(outputDir)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path for output dir: %w", err)
 	}
 
 	cmd := exec.Command("go", "build", "-o", absOutputDir, "./")
-	cmd.Dir = LambdaSrcDir
+	cmd.Dir = srcDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = append(os.Environ(),
@@ -35,6 +47,6 @@ func BuildLambda() error {
 		return fmt.Errorf("lambda build failed: %w", err)
 	}
 
-	fmt.Println(">>> Lambda binary built successfully.")
+	fmt.Printf(">>> Lambda binary for %s built successfully.\n", srcDir)
 	return nil
 }

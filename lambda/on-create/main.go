@@ -151,6 +151,11 @@ func main() {
 	}
 	osstore.Init(osEndpoint)
 
+	if err := osstore.EnsureIndex(ctx); err != nil {
+		slog.Error("Failed to ensure OpenSearch index exists with k-NN mapping", "error", err)
+		os.Exit(1)
+	}
+
 	app := &App{
 		moderationCfg: recognition.LoadModerationConfig(),
 	}

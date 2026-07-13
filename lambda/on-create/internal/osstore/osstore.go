@@ -14,6 +14,31 @@ import (
 const (
 	indexName      = "images"
 	requestTimeout = 10 * time.Second
+
+	// indexMapping creates the images index with k-NN enabled and image_vector
+	// explicitly typed as knn_vector. This MUST be applied before any documents
+	// are indexed; otherwise OpenSearch's dynamic mapping will infer image_vector
+	// as a plain float array and k-NN queries will fail with a 400 error.
+	indexMapping = `{
+		"settings": {
+			"index": {
+				"knn": true,
+				"knn.algo_param.ef_search": 100
+			}
+		},
+		"mappings": {
+			"properties": {
+				"image_key":   { "type": "keyword" },
+				"labels":      { "type": "keyword" },
+				"categories": { "type": "keyword" },
+				"parents":     { "type": "keyword" },
+				"image_vector": {
+					"type":      "knn_vector",
+					"dimension": 1024
+				}
+			}
+		}
+	}`
 )
 
 var (
@@ -24,6 +49,53 @@ var (
 func Init(osEndpoint string) {
 	endpoint = strings.TrimRight(osEndpoint, "/")
 	httpClient = &http.Client{Timeout: requestTimeout}
+}
+
+// EnsureIndex creates the images index with the correct k-NN mapping if it
+// does not already exist. It is idempotent: a 200/OK on HEAD means the index
+// is already present and no action is taken.
+func EnsureIndex(ctx context.Context) error {
+	indexURL := fmt.Sprintf("%s/%s", endpoint, indexName)
+
+	// Check whether the index exists.
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, indexURL, nil)
+	if err != nil {
+		return fmt.Errorf("build HEAD request for index check: %w", err)
+	}
+	headResp, err := httpClient.Do(headReq)
+	if err != nil {
+		return fmt.Errorf("HEAD %s: %w", indexURL, err)
+	}
+	headResp.Body.Close()
+
+	if headResp.StatusCode == http.StatusOK {
+		// Index already exists; nothing to do.
+		return nil
+	}
+
+	if headResp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("unexpected status checking index existence: %s", headResp.Status)
+	}
+
+	// Create the index with the k-NN mapping.
+	putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, indexURL, bytes.NewBufferString(indexMapping))
+	if err != nil {
+		return fmt.Errorf("build PUT request for index creation: %w", err)
+	}
+	putReq.Header.Set("Content-Type", "application/json")
+
+	putResp, err := httpClient.Do(putReq)
+	if err != nil {
+		return fmt.Errorf("PUT %s: %w", indexURL, err)
+	}
+	defer putResp.Body.Close()
+
+	if putResp.StatusCode != http.StatusOK && putResp.StatusCode != http.StatusCreated {
+		raw, _ := io.ReadAll(io.LimitReader(putResp.Body, 4096))
+		return fmt.Errorf("create index returned %s: %s", putResp.Status, raw)
+	}
+
+	return nil
 }
 
 type Record struct {
